@@ -1,0 +1,448 @@
+// Personal Finance Dashboard — Prisma Schema
+// SQLite for local development; swap provider to "postgresql" for production.
+// Prisma 7 uses "prisma-client" provider with local output.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS
+// SQLite stores these as TEXT; Prisma enforces values at the ORM layer.
+// ---------------------------------------------------------------------------
+
+enum ImportSource {
+  SA_BANK_PDF
+  SA_BANK_CSV
+  GOOGLE_PAY_CSV
+  GENERIC_CSV
+  INVESTMENT_CSV
+  MANUAL
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum TransactionType {
+  EXPENSE
+  INCOME
+  TRANSFER
+  REFUND
+  FEE
+  CARD_PURCHASE
+  EFT
+  DEBIT_ORDER
+  CASH_WITHDRAWAL
+  INVESTMENT
+  UNKNOWN
+}
+
+enum TransactionDirection {
+  DEBIT
+  CREDIT
+}
+
+enum AssetType {
+  STOCK
+  CRYPTO
+  ETF
+  BOND
+  CASH
+  PROPERTY
+  OTHER
+}
+
+enum InvestmentTransactionType {
+  BUY
+  SELL
+  DIVIDEND
+  FEE
+  TRANSFER_IN
+  TRANSFER_OUT
+  SPLIT
+}
+
+// ---------------------------------------------------------------------------
+// USER — single-user MVP; userId foreign keys are wired for future auth
+// ---------------------------------------------------------------------------
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts     Account[]
+  importBatches ImportBatch[]
+  transactions Transaction[]
+  budgets      Budget[]
+  assets       Asset[]
+  categories   Category[]
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// ACCOUNT — bank account / wallet that transactions belong to
+// ---------------------------------------------------------------------------
+model Account {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String                       // e.g. "Cheque Account", "Savings"
+  institution   String?                      // e.g. "FNB", "Capitec", "Nedbank"
+  accountNumber String?                      // masked: last 4 digits only
+  currency      String   @default("ZAR")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transactions  Transaction[]
+  importBatches ImportBatch[]
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+// ---------------------------------------------------------------------------
+// IMPORT BATCH — one upload session; preserves auditability
+// ---------------------------------------------------------------------------
+model ImportBatch {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId       String?
+  account         Account?     @relation(fields: [accountId], references: [id])
+  source          ImportSource
+  status          ImportStatus @default(PENDING)
+  originalFilename String
+  // SHA-256 of raw file bytes — used to reject exact duplicate uploads
+  fileHash        String
+  parsedCount     Int          @default(0)
+  importedCount   Int          @default(0)
+  skippedCount    Int          @default(0)
+  errorCount      Int          @default(0)
+  // ISO date range extracted from the statement
+  statementFrom   DateTime?
+  statementTo     DateTime?
+  metadata        String?      // JSON blob for parser-specific metadata
+  createdAt       DateTime     @default(now())
+  completedAt     DateTime?
+
+  rawRecords    RawImportRecord[]
+  importErrors  ImportError[]
+  transactions  Transaction[]
+
+  @@index([userId])
+  @@index([fileHash])
+  @@map("import_batches")
+}
+
+// ---------------------------------------------------------------------------
+// RAW IMPORT RECORD — one row from the source file, before normalization
+// Provides full audit trail back to original data.
+// ---------------------------------------------------------------------------
+model RawImportRecord {
+  id            String      @id @default(cuid())
+  batchId       String
+  batch         ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowIndex      Int                          // zero-based row in source file
+  rawData       String                       // JSON-serialized raw row
+  transactionId String?     @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+  wasSkipped    Boolean     @default(false)
+  skipReason    String?
+  createdAt     DateTime    @default(now())
+
+  @@index([batchId])
+  @@map("raw_import_records")
+}
+
+// ---------------------------------------------------------------------------
+// IMPORT ERROR — non-fatal warnings or row-level errors from a batch
+// ---------------------------------------------------------------------------
+model ImportError {
+  id        String      @id @default(cuid())
+  batchId   String
+  batch     ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowIndex  Int?
+  severity  String      @default("warning")  // "warning" | "error"
+  code      String                            // machine-readable error code
+  message   String
+  rawData   String?                           // JSON of the offending row
+
+  @@index([batchId])
+  @@map("import_errors")
+}
+
+// ---------------------------------------------------------------------------
+// CATEGORY — user-defined spending/income categories
+// ---------------------------------------------------------------------------
+model Category {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  color       String     @default("#6366f1") // hex color for UI
+  icon        String?                         // lucide icon name
+  parentId    String?
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  isSystem    Boolean    @default(false)      // seed categories vs user-created
+  createdAt   DateTime   @default(now())
+
+  transactions  Transaction[]
+  budgetItems   BudgetItem[]
+  categoryRules CategoryRule[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("categories")
+}
+
+// ---------------------------------------------------------------------------
+// CATEGORY RULE — keyword/pattern rules for auto-categorization
+// ---------------------------------------------------------------------------
+model CategoryRule {
+  id          String   @id @default(cuid())
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  // pattern matched against cleaned description (case-insensitive substring or regex)
+  pattern     String
+  isRegex     Boolean  @default(false)
+  priority    Int      @default(0)            // higher = matched first
+  createdAt   DateTime @default(now())
+
+  @@index([categoryId])
+  @@map("category_rules")
+}
+
+// ---------------------------------------------------------------------------
+// MERCHANT ALIAS — maps raw merchant noise to a clean canonical name
+// ---------------------------------------------------------------------------
+model MerchantAlias {
+  id              String   @id @default(cuid())
+  rawPattern      String   @unique
+  cleanName       String
+  categoryHint    String?  // optional category name hint
+  isRegex         Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@map("merchant_aliases")
+}
+
+// ---------------------------------------------------------------------------
+// TRANSACTION — the core normalized transaction record
+// ---------------------------------------------------------------------------
+model Transaction {
+  id                 String               @id @default(cuid())
+  userId             String
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId          String
+  account            Account              @relation(fields: [accountId], references: [id])
+  batchId            String?
+  batch              ImportBatch?         @relation(fields: [batchId], references: [id])
+
+  date               DateTime
+  // Positive amount regardless of direction; direction field determines sign
+  amount             Float
+  currency           String               @default("ZAR")
+  direction          TransactionDirection
+  type               TransactionType      @default(UNKNOWN)
+
+  // Raw description from statement; never mutated after import
+  rawDescription     String
+  // Cleaned description after merchant normalization
+  cleanDescription   String
+  // Normalized merchant name after alias matching
+  merchantName       String?
+  // Reference number from statement (e.g. EFT ref)
+  referenceNumber    String?
+
+  categoryId         String?
+  category           Category?            @relation(fields: [categoryId], references: [id])
+  // True when the user has manually set the category (locks auto-categorization)
+  categoryLocked     Boolean              @default(false)
+
+  notes              String?
+  tags               String?              // JSON array of string tags
+
+  // Deduplication hash — deterministic key for detecting duplicates
+  // SHA-256 of: date(YYYY-MM-DD) + amount + direction + accountId + rawDescription
+  dedupeHash         String
+  isDuplicate        Boolean              @default(false)
+  duplicateOfId      String?
+
+  // Running account balance from statement, if available
+  balance            Float?
+
+  // For future recurring transaction detection
+  recurringPatternId String?
+
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  rawRecord    RawImportRecord?
+  splits       TransactionSplit[]
+
+  @@unique([dedupeHash])
+  @@index([userId, date])
+  @@index([userId, categoryId])
+  @@index([accountId, date])
+  @@index([batchId])
+  @@index([merchantName])
+  @@map("transactions")
+}
+
+// ---------------------------------------------------------------------------
+// TRANSACTION SPLIT — split one transaction across multiple categories
+// Schema is complete; UI is partial in MVP.
+// ---------------------------------------------------------------------------
+model TransactionSplit {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  amount        Float
+  categoryId    String?
+  notes         String?
+  createdAt     DateTime    @default(now())
+
+  @@index([transactionId])
+  @@map("transaction_splits")
+}
+
+// ---------------------------------------------------------------------------
+// BUDGET — a monthly (or future: weekly/custom) budget envelope
+// ---------------------------------------------------------------------------
+model Budget {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  // Year + month for monthly budgets; null for rolling
+  year      Int?
+  month     Int?     // 1–12
+  currency  String   @default("ZAR")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items BudgetItem[]
+
+  @@index([userId, year, month])
+  @@map("budgets")
+}
+
+// ---------------------------------------------------------------------------
+// BUDGET ITEM — per-category allocation within a budget
+// ---------------------------------------------------------------------------
+model BudgetItem {
+  id         String   @id @default(cuid())
+  budgetId   String
+  budget     Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  amount     Float
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([budgetId, categoryId])
+  @@index([budgetId])
+  @@map("budget_items")
+}
+
+// ---------------------------------------------------------------------------
+// ASSET — investable asset definition (stock, crypto, ETF, etc.)
+// ---------------------------------------------------------------------------
+model Asset {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol      String                      // e.g. "AAPL", "BTC", "SATRIX40"
+  name        String
+  assetType   AssetType
+  currency    String    @default("ZAR")
+  exchange    String?                     // e.g. "JSE", "NASDAQ", "CRYPTO"
+  isin        String?
+  createdAt   DateTime  @default(now())
+
+  holdings              Holding[]
+  investmentTransactions InvestmentTransaction[]
+  priceSnapshots        PriceSnapshot[]
+
+  @@unique([userId, symbol])
+  @@index([userId])
+  @@map("assets")
+}
+
+// ---------------------------------------------------------------------------
+// HOLDING — current position in an asset
+// Derived from InvestmentTransactions but cached here for fast reads.
+// ---------------------------------------------------------------------------
+model Holding {
+  id            String   @id @default(cuid())
+  assetId       String
+  asset         Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  // Quantity held (units/shares/coins)
+  quantity      Float
+  // Average cost basis per unit in the asset's currency
+  averageCost   Float
+  // Total cost basis
+  totalCost     Float
+  currency      String   @default("ZAR")
+  lastUpdated   DateTime @default(now())
+
+  @@unique([assetId])
+  @@map("holdings")
+}
+
+// ---------------------------------------------------------------------------
+// INVESTMENT TRANSACTION — buy/sell/dividend events
+// ---------------------------------------------------------------------------
+model InvestmentTransaction {
+  id          String                    @id @default(cuid())
+  assetId     String
+  asset       Asset                     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  date        DateTime
+  type        InvestmentTransactionType
+  quantity    Float
+  price       Float                     // per-unit price at time of transaction
+  totalAmount Float                     // quantity * price ± fees
+  fees        Float                     @default(0)
+  currency    String                    @default("ZAR")
+  notes       String?
+  batchId     String?                   // if imported from CSV
+  dedupeHash  String                    @unique
+  createdAt   DateTime                  @default(now())
+
+  @@index([assetId, date])
+  @@map("investment_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// PRICE SNAPSHOT — point-in-time price for an asset
+// Manually entered in MVP; can be replaced by API feed.
+// ---------------------------------------------------------------------------
+model PriceSnapshot {
+  id        String   @id @default(cuid())
+  assetId   String
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  price     Float
+  currency  String   @default("ZAR")
+  source    String   @default("manual")  // "manual" | "api" | "import"
+  capturedAt DateTime @default(now())
+
+  @@index([assetId, capturedAt])
+  @@map("price_snapshots")
+}

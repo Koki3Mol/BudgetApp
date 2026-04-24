@@ -1,0 +1,146 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   CSS Custom Properties — Design Tokens
+   These are also consumed by Recharts via inline style injection.
+--------------------------------------------------------------------------- */
+:root {
+  /* Chart palette (8 colors for category charts) */
+  --chart-1: #6366f1;
+  --chart-2: #22c55e;
+  --chart-3: #f97316;
+  --chart-4: #3b82f6;
+  --chart-5: #ec4899;
+  --chart-6: #eab308;
+  --chart-7: #06b6d4;
+  --chart-8: #a855f7;
+
+  /* Semantic */
+  --positive: #10b981;
+  --negative: #ef4444;
+  --caution: #f59e0b;
+  --neutral: #6b7280;
+
+  /* Surface */
+  --surface-base: #ffffff;
+  --surface-raised: #f9fafb;
+  --surface-overlay: #f3f4f6;
+
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  --radius: 0.5rem;
+}
+
+.dark {
+  --surface-base: #0f172a;
+  --surface-raised: #1e293b;
+  --surface-overlay: #334155;
+  --border: #334155;
+  --border-strong: #475569;
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+--------------------------------------------------------------------------- */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    @apply bg-surface-raised text-slate-900 antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  .dark body {
+    @apply text-slate-100;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Component utilities
+--------------------------------------------------------------------------- */
+@layer components {
+  .card {
+    @apply rounded-xl bg-white border border-gray-100 shadow-card p-4;
+  }
+  .dark .card {
+    @apply bg-slate-800 border-slate-700;
+  }
+
+  .stat-card {
+    @apply card flex flex-col gap-1;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+
+  .badge-income {
+    @apply badge bg-positive/10 text-positive-dark;
+  }
+
+  .badge-expense {
+    @apply badge bg-negative/10 text-negative-dark;
+  }
+
+  .badge-neutral {
+    @apply badge bg-gray-100 text-gray-600;
+  }
+
+  .badge-warning {
+    @apply badge bg-caution/10 text-caution-dark;
+  }
+
+  /* Table */
+  .data-table {
+    @apply w-full text-sm;
+  }
+
+  .data-table thead {
+    @apply bg-surface-overlay;
+  }
+
+  .data-table th {
+    @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap;
+  }
+
+  .data-table td {
+    @apply px-3 py-2.5 border-b border-gray-50 align-middle;
+  }
+
+  .data-table tr:hover td {
+    @apply bg-surface-raised;
+  }
+
+  /* Amount coloring */
+  .amount-debit {
+    @apply text-negative font-medium tabular-nums;
+  }
+
+  .amount-credit {
+    @apply text-positive font-medium tabular-nums;
+  }
+
+  /* Scrollable table wrapper */
+  .table-container {
+    @apply overflow-x-auto rounded-xl border border-gray-100;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    @apply h-2 rounded-full bg-gray-100 overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-500;
+  }
+}
