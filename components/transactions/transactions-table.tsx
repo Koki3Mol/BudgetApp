@@ -105,19 +105,32 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
         body: JSON.stringify({ name, color: newCatColor }),
       });
 
-      // Check if response is ok before parsing JSON
+      // Read response as text first to avoid res.json() throwing on empty body
+      const text = await res.text();
+      setCreatingCat(false);
+
       if (!res.ok) {
-        const errorText = await res.text();
-        setCatError(`API error: ${res.status}`);
-        setCreatingCat(false);
+        // If server returned an error page or empty body, show status
+        const serverMsg = text ? text : res.statusText;
+        setCatError(`API error: ${res.status} ${serverMsg}`);
         return;
       }
 
-      const json = await res.json();
+      if (!text) {
+        setCatError("Empty response from server");
+        return;
+      }
+
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch (err) {
+        setCatError("Invalid JSON response from server");
+        return;
+      }
       
       if (!json.success) { 
         setCatError(json.error ?? "Failed to create category"); 
-        setCreatingCat(false);
         return; 
       }
 
@@ -130,7 +143,6 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
       // Auto-save with new category
       setSaving(txId);
       setEditingId(null);
-      setCreatingCat(false);
       
       try {
         const saveRes = await fetch(`/api/transactions/${txId}`, {
