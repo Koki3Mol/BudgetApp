@@ -113,11 +113,22 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
     // Auto-save with new category
     setSaving(txId);
     setEditingId(null);
-    await fetch(`/api/transactions/${txId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ categoryId: json.data.id }),
-    });
+    try {
+      const saveRes = await fetch(`/api/transactions/${txId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryId: json.data.id }),
+      });
+      if (!saveRes.ok) {
+        setCatError("Failed to save category to transaction");
+        setSaving(null);
+        return;
+      }
+    } catch (error) {
+      setCatError("Error saving category");
+      setSaving(null);
+      return;
+    }
     setSaving(null);
     onRefresh();
   }
@@ -242,7 +253,7 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
                         )}
                       </div>
                     ) : (
-                      /* â”€â”€ Display mode â€” always shows category + edit button â”€â”€ */
+                      /* Display mode — always shows category + edit button */
                       <div className="flex items-center gap-1.5">
                         {tx.categoryColor ? (
                           <span
