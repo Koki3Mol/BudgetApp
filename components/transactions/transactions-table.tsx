@@ -1,4 +1,4 @@
-﻿/**
+/**
  * components/transactions/transactions-table.tsx
  *
  * Paginated table with inline category editing on every row.
@@ -97,40 +97,66 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
     if (!name) { setCatError("Enter a name"); return; }
     setCreatingCat(true);
     setCatError("");
-    const res = await fetch("/api/categories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, color: newCatColor }),
-    });
-    const json = await res.json();
-    setCreatingCat(false);
-    if (!json.success) { setCatError(json.error ?? "Failed"); return; }
-    // Reload categories, select the new one, and save
-    loadCategories();
-    setPendingCategory(json.data.id);
-    setAddingCategory(false);
-    setNewCatName("");
-    // Auto-save with new category
-    setSaving(txId);
-    setEditingId(null);
+    
     try {
-      const saveRes = await fetch(`/api/transactions/${txId}`, {
-        method: "PATCH",
+      const res = await fetch("/api/categories", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoryId: json.data.id }),
+        body: JSON.stringify({ name, color: newCatColor }),
       });
-      if (!saveRes.ok) {
-        setCatError("Failed to save category to transaction");
+
+      // Check if response is ok before parsing JSON
+      if (!res.ok) {
+        const errorText = await res.text();
+        setCatError(`API error: ${res.status}`);
+        setCreatingCat(false);
+        return;
+      }
+
+      const json = await res.json();
+      
+      if (!json.success) { 
+        setCatError(json.error ?? "Failed to create category"); 
+        setCreatingCat(false);
+        return; 
+      }
+
+      // Category created successfully - reload and auto-save
+      loadCategories();
+      setPendingCategory(json.data.id);
+      setAddingCategory(false);
+      setNewCatName("");
+      
+      // Auto-save with new category
+      setSaving(txId);
+      setEditingId(null);
+      setCreatingCat(false);
+      
+      try {
+        const saveRes = await fetch(`/api/transactions/${txId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ categoryId: json.data.id }),
+        });
+        
+        if (!saveRes.ok) {
+          setCatError("Failed to save category to transaction");
+          setSaving(null);
+          return;
+        }
+      } catch (error) {
+        setCatError("Error saving category to transaction");
         setSaving(null);
         return;
       }
-    } catch (error) {
-      setCatError("Error saving category");
+      
       setSaving(null);
-      return;
+      onRefresh();
+    } catch (error) {
+      console.error("Error creating category:", error);
+      setCatError("Network error while creating category");
+      setCreatingCat(false);
     }
-    setSaving(null);
-    onRefresh();
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
