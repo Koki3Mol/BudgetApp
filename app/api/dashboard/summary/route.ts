@@ -51,10 +51,10 @@ export async function GET(req: NextRequest) {
       where: { ...periodWhere, direction: "DEBIT" },
       _sum: { amount: true },
     }),
-    // Category breakdown
+    // Category breakdown — only include transactions with a categoryId
     db.transaction.groupBy({
       by: ["categoryId"],
-      where: { ...periodWhere, direction: "DEBIT" },
+      where: { ...periodWhere, direction: "DEBIT", categoryId: { not: null } },
       _sum: { amount: true },
       _count: true,
       orderBy: { _sum: { amount: "desc" } },
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
   const netCashFlow = totalIncome - totalExpenses;
 
   // Resolve category names for category breakdown
-  const categoryIds = categoryAgg.map((c) => c.categoryId).filter(Boolean) as string[];
+  const categoryIds = categoryAgg.map((c) => c.categoryId).filter((id): id is string => id !== null);
   const categories = categoryIds.length > 0
     ? await db.category.findMany({ where: { id: { in: categoryIds } } })
     : [];
