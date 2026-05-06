@@ -1,12 +1,11 @@
 /**
  * app/(app)/tracking-expenses/page.tsx
- *
- * Primary dashboard: Tracking Expenses (Budgeting, Expenses, Investments)
+ * Client component: Tracking Expenses dashboard
  */
 
-// Server component for the Tracking Expenses dashboard
+"use client";
 
-import { type Metadata } from "next";
+import { useEffect, useState } from "react";
 import { PortfolioAllocationChart } from "@/components/investments/portfolio-allocation-chart";
 import { HoldingsTable } from "@/components/investments/holdings-table";
 import { AddHoldingForm } from "@/components/investments/add-holding-form";
@@ -14,29 +13,42 @@ import { MonthlyTrendChart } from "@/components/dashboard/monthly-trend-chart";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { BudgetProgressSnapshot } from "@/components/dashboard/budget-progress-snapshot";
 import { ImportHealthCard } from "@/components/dashboard/import-health-card";
-// client page; no extra utilities needed here
 
-export const metadata: Metadata = { title: "Tracking Expenses" };
 
-async function getDashboardSummary(): Promise<any | null> {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const res = await fetch(`${baseUrl}/api/dashboard/summary`, { cache: "no-store" });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.success ? json.data : null;
-  } catch {
-    return null;
-  }
-}
+type DashboardSummary = any;
+type PortfolioData = any;
 
-export default async function TrackingExpensesPage() {
-  const summary = await getDashboardSummary();
-  // Investments data
+export default function TrackingExpensesPage() {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const portfolioRes = await fetch(`${baseUrl}/api/investments/holdings`, { cache: "no-store" });
-  const portfolioJson = await portfolioRes.json();
-  const portfolio = portfolioJson.success ? portfolioJson.data : null;
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+
+  async function loadSummary() {
+    try {
+      const res = await fetch(`${baseUrl}/api/dashboard/summary`, { cache: "no-store" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setSummary(json.data);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function loadPortfolio() {
+    try {
+      const res = await fetch(`${baseUrl}/api/investments/holdings`, { cache: "no-store" });
+      const json = await res.json();
+      if (json.success) setPortfolio(json.data);
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    loadSummary();
+    loadPortfolio();
+  }, []);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -69,7 +81,7 @@ export default async function TrackingExpensesPage() {
             <HoldingsTable holdings={portfolio?.holdings ?? []} loading={portfolio == null} />
           </div>
           <div className="card p-4">
-            <AddHoldingForm onSuccess={() => { /* no-op for this dashboard; Investments page handles updates */ }} />
+            <AddHoldingForm onSuccess={() => { loadPortfolio(); loadSummary(); }} />
           </div>
         </div>
       </div>
