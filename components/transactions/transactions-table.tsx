@@ -106,9 +106,9 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
   try {
     json = await res.json();
   } catch (err) {
-    const text = await res.text();
+    const text = await res.clone().text();
     console.error("API/categories POST non-JSON response", { status: res.status, text });
-    setCatError(`Server error: ${res.status} ${text || "Unknown error"}`);
+    setCatError(`Server error: ${res.status} ${text ?? ""}`);
     setCreatingCat(false);
     return;
   }
@@ -210,8 +210,8 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
                               className="w-6 h-6 rounded cursor-pointer border border-gray-200"
                               title="Pick colour"
                             />
-                            <button
-                              onClick={() => createCategory(tx.id)}
+                            <button type="button"
+                              onClick={() => { console.log("Create category clicked for tx", tx.id); createCategory(tx.id); }}
                               disabled={creatingCat}
                               className="p-1 rounded text-positive hover:bg-green-50 disabled:opacity-50"
                               title="Create and assign"
