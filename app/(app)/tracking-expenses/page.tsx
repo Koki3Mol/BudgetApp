@@ -33,7 +33,8 @@ async function getDashboardSummary(): Promise<any | null> {
 export default async function TrackingExpensesPage() {
   const summary = await getDashboardSummary();
   // Investments data
-  const portfolioRes = await fetch("/api/investments/holdings");
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const portfolioRes = await fetch(`${baseUrl}/api/investments/holdings`, { cache: "no-store" });
   const portfolioJson = await portfolioRes.json();
   const portfolio = portfolioJson.success ? portfolioJson.data : null;
 
