@@ -97,14 +97,23 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
     if (!name) { setCatError("Enter a name"); return; }
     setCreatingCat(true);
     setCatError("");
-    const res = await fetch("/api/categories", {
+  const res = await fetch("/api/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, color: newCatColor }),
     });
-    const json = await res.json();
+  let json;
+  try {
+    json = await res.json();
+  } catch (err) {
+    const text = await res.text();
+    console.error("API/categories POST non-JSON response", { status: res.status, text });
+    setCatError(`Server error: ${res.status} ${text || "Unknown error"}`);
     setCreatingCat(false);
-    if (!json.success) { setCatError(json.error ?? "Failed"); return; }
+    return;
+  }
+  setCreatingCat(false);
+  if (!json?.success) { setCatError(json?.error ?? "Failed"); return; }
 
     // Reload categories, select the new one, and save
     await loadCategories();

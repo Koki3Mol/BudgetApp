@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: category }, { status: 201 });
   } catch (err) {
     // Ensure we always return JSON on error so the client doesn't attempt to parse an empty/non-JSON response
-    console.error("categories POST error:", err);
+    console.error("categories POST error:", err, "body:", body);
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
