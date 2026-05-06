@@ -1,4 +1,4 @@
-﻿/**
+/**
  * components/transactions/transactions-table.tsx
  *
  * Paginated table with inline category editing on every row.
@@ -97,6 +97,7 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
     if (!name) { setCatError("Enter a name"); return; }
     setCreatingCat(true);
     setCatError("");
+<<<<<<< HEAD
     const res = await fetch("/api/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -115,24 +116,84 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
     // Auto-save with new category
     setSaving(txId);
     setEditingId(null);
+=======
+    
+>>>>>>> ac5846a8adc8fc1c79c2e2ebf0f4a9ca7fec03c9
     try {
-      const saveRes = await fetch(`/api/transactions/${txId}`, {
-        method: "PATCH",
+      const res = await fetch("/api/categories", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
+<<<<<<< HEAD
         body: JSON.stringify({ categoryId: newId }),
+=======
+        body: JSON.stringify({ name, color: newCatColor }),
+>>>>>>> ac5846a8adc8fc1c79c2e2ebf0f4a9ca7fec03c9
       });
-      if (!saveRes.ok) {
-        setCatError("Failed to save category to transaction");
+
+      // Read response as text first to avoid res.json() throwing on empty body
+      const text = await res.text();
+      setCreatingCat(false);
+
+      if (!res.ok) {
+        // If server returned an error page or empty body, show status
+        const serverMsg = text ? text : res.statusText;
+        setCatError(`API error: ${res.status} ${serverMsg}`);
+        return;
+      }
+
+      if (!text) {
+        setCatError("Empty response from server");
+        return;
+      }
+
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch (err) {
+        setCatError("Invalid JSON response from server");
+        return;
+      }
+      
+      if (!json.success) { 
+        setCatError(json.error ?? "Failed to create category"); 
+        return; 
+      }
+
+      // Category created successfully - reload and auto-save
+      loadCategories();
+      setPendingCategory(json.data.id);
+      setAddingCategory(false);
+      setNewCatName("");
+      
+      // Auto-save with new category
+      setSaving(txId);
+      setEditingId(null);
+      
+      try {
+        const saveRes = await fetch(`/api/transactions/${txId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ categoryId: json.data.id }),
+        });
+        
+        if (!saveRes.ok) {
+          setCatError("Failed to save category to transaction");
+          setSaving(null);
+          return;
+        }
+      } catch (error) {
+        setCatError("Error saving category to transaction");
         setSaving(null);
         return;
       }
-    } catch (error) {
-      setCatError("Error saving category");
+      
       setSaving(null);
-      return;
+      onRefresh();
+    } catch (error) {
+      console.error("Error creating category:", error);
+      setCatError("Network error while creating category");
+      setCreatingCat(false);
     }
-    setSaving(null);
-    onRefresh();
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
