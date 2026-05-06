@@ -106,8 +106,10 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
     setCreatingCat(false);
     if (!json.success) { setCatError(json.error ?? "Failed"); return; }
     // Reload categories, select the new one, and save
-    loadCategories();
-    setPendingCategory(json.data.id);
+    await loadCategories();
+    const newId = json.data?.id ?? null;
+    if (!newId) { setCatError("Failed to create category"); return; }
+    setPendingCategory(newId);
     setAddingCategory(false);
     setNewCatName("");
     // Auto-save with new category
@@ -117,7 +119,7 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
       const saveRes = await fetch(`/api/transactions/${txId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoryId: json.data.id }),
+        body: JSON.stringify({ categoryId: newId }),
       });
       if (!saveRes.ok) {
         setCatError("Failed to save category to transaction");
