@@ -102,11 +102,13 @@ export function TransactionsTable({ transactions, total, page, onPageChange, loa
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, color: newCatColor }),
     });
+  // Clone the response so we can read text if JSON parsing fails
+  const resClone = res.clone();
   let json;
   try {
     json = await res.json();
   } catch (err) {
-    const text = await res.clone().text();
+    const text = await resClone.text();
     console.error("API/categories POST non-JSON response", { status: res.status, text });
     setCatError(`Server error: ${res.status} ${text ?? ""}`);
     setCreatingCat(false);
